@@ -1,5 +1,6 @@
 import 'core_type.dart';
 import 'driver_type.dart';
+import 'anti_dpi_config.dart';
 
 /// Конфигурация ядра VPN
 class CoreConfig {
@@ -147,6 +148,9 @@ class VpnEngineConfig {
   /// Конфигурация драйвера
   final DriverConfig driver;
 
+  /// Anti-DPI конфигурация
+  final AntiDPIConfig antiDPI;
+
   /// Автоматическое подключение
   final bool autoConnect;
 
@@ -156,6 +160,7 @@ class VpnEngineConfig {
   const VpnEngineConfig({
     required this.core,
     this.driver = const DriverConfig(),
+    this.antiDPI = const AntiDPIConfig(),
     this.autoConnect = false,
     this.connectionTimeout = 30,
   });
@@ -167,6 +172,9 @@ class VpnEngineConfig {
       driver: map['driver'] != null
           ? DriverConfig.fromMap(map['driver'] as Map<String, dynamic>)
           : const DriverConfig(),
+      antiDPI: map['antiDPI'] != null
+          ? AntiDPIConfig.fromMap(map['antiDPI'] as Map<String, dynamic>)
+          : const AntiDPIConfig(),
       autoConnect: map['autoConnect'] as bool? ?? false,
       connectionTimeout: map['connectionTimeout'] as int? ?? 30,
     );
@@ -177,6 +185,7 @@ class VpnEngineConfig {
     return {
       'core': core.toMap(),
       'driver': driver.toMap(),
+      'antiDPI': antiDPI.toMap(),
       'autoConnect': autoConnect,
       'connectionTimeout': connectionTimeout,
     };

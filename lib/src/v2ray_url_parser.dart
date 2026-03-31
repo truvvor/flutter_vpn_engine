@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'models/anti_dpi_config.dart';
 
 /// Base class for V2Ray URL parsers
 abstract class V2RayURL {
   final String url;
+  AntiDPIConfig antiDPIConfig;
 
-  V2RayURL({required this.url});
+  V2RayURL({required this.url, this.antiDPIConfig = const AntiDPIConfig()});
 
   /// Get remark/alias
   String get remark;
@@ -99,7 +101,8 @@ class VmessURL extends V2RayURL {
               'tlsSettings': {'serverName': _config['sni']},
           }
         }
-      ]
+      ],
+      'antiDPI': antiDPIConfig.toMap(),
     });
   }
 
@@ -188,7 +191,8 @@ class VlessURL extends V2RayURL {
               }
           }
         }
-      ]
+      ],
+      'antiDPI': antiDPIConfig.toMap(),
     });
   }
 

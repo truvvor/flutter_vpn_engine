@@ -15,6 +15,7 @@ export 'src/models/core_type.dart';
 export 'src/models/driver_type.dart';
 export 'src/models/tun_options.dart';
 export 'src/models/platform_tun_handle.dart';
+export 'src/models/anti_dpi_config.dart';
 
 // Core компоненты
 export 'src/core/engine_manager.dart';

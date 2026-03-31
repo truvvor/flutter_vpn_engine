@@ -6,6 +6,7 @@ import os.log
 class PacketTunnelProvider: NEPacketTunnelProvider {
     private var isTunnelRunning = false
     private var hevTunnel: HevSocks5Tunnel?
+    private var antiDPIManager: XrayAntiDPIManager?
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         os_log(.debug, "PacketTunnelProvider: Starting tunnel with options: %@", String(describing: options))
@@ -25,8 +26,14 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             os_log(.error, "PacketTunnelProvider: Failed to load provider configuration")
             completionHandler(NSError(domain: "PacketTunnelProvider", code: -1, userInfo: [NSLocalizedDescriptionKey: "Missing provider configuration"]))
             return
-           
+
         }
+
+        // Initialize anti-DPI manager from provider configuration
+        let manager = XrayAntiDPIManager()
+        manager.configure(from: providerConfig)
+        self.antiDPIManager = manager
+        os_log(.info, "PacketTunnelProvider: Anti-DPI manager initialized")
 
         os_log(.debug, "PacketTunnelProvider: Config - tunAddr: %@, tunMask: %@, tunDns: %@, socks5Proxy: %@", tunAddr, tunMask, tunDns, socks5Proxy)
 
@@ -174,14 +181,16 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // Method to stop the tunnel
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         os_log(.debug, "PacketTunnelProvider: Stopping tunnel with reason: %@", reason.rawValue.description)
-        
+
         // Stop the tunnel and close the flow
         isTunnelRunning = false
         hevTunnel?.stop()
         hevTunnel = nil
-        
-        
-        
+
+        // Cleanup anti-DPI manager
+        antiDPIManager?.cleanup()
+        antiDPIManager = nil
+
         // Call the completion handler to indicate that the tunnel has stopped
         completionHandler()
     }
