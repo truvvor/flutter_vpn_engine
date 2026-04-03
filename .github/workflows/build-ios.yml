@@ -1,0 +1,100 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.x'
+          channel: stable
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Install signing certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          MAIN_PROVISION_PROFILE_BASE64: ${{ secrets.MAIN_PROVISION_PROFILE_BASE64 }}
+          TUNNEL_PROVISION_PROFILE_BASE64: ${{ secrets.TUNNEL_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          MAIN_PP_PATH=$RUNNER_TEMP/main_pp.mobileprovision
+          TUNNEL_PP_PATH=$RUNNER_TEMP/tunnel_pp.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          echo -n "$MAIN_PROVISION_PROFILE_BASE64" | base64 --decode -o $MAIN_PP_PATH
+          echo -n "$TUNNEL_PROVISION_PROFILE_BASE64" | base64 --decode -o $TUNNEL_PP_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          curl -sL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
+          curl -sL https://www.apple.com/certificateauthority/AppleRootCA-G3.cer -o /tmp/AppleRootCA-G3.cer
+          security import /tmp/AppleWWDRCAG3.cer -k $KEYCHAIN_PATH -T /usr/bin/codesign || true
+          security import /tmp/AppleRootCA-G3.cer -k $KEYCHAIN_PATH -T /usr/bin/codesign || true
+
+          MAIN_UUID=$(security cms -D -i $MAIN_PP_PATH 2>/dev/null | plutil -extract UUID raw -)
+          TUNNEL_UUID=$(security cms -D -i $TUNNEL_PP_PATH 2>/dev/null | plutil -extract UUID raw -)
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp $MAIN_PP_PATH "$HOME/Library/MobileDevice/Provisioning Profiles/$MAIN_UUID.mobileprovision"
+          cp $TUNNEL_PP_PATH "$HOME/Library/MobileDevice/Provisioning Profiles/$TUNNEL_UUID.mobileprovision"
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Sign and create IPA
+        run: |
+          APP_PATH=$(find build/ios/iphoneos -name "*.app" -type d | head -1)
+          APP_NAME=$(basename "$APP_PATH" .app)
+
+          MAIN_PP_PATH=$RUNNER_TEMP/main_pp.mobileprovision
+          TUNNEL_PP_PATH=$RUNNER_TEMP/tunnel_pp.mobileprovision
+          IDENTITY="Apple Development: Vladimir Vorkachev (AS23BV3K8Z)"
+
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+
+          cp $MAIN_PP_PATH "Payload/$APP_NAME.app/embedded.mobileprovision"
+
+          TUNNEL_APPEX=$(find "Payload/$APP_NAME.app/PlugIns" -name "*.appex" -type d 2>/dev/null | head -1)
+          if [ -n "$TUNNEL_APPEX" ]; then
+            cp $TUNNEL_PP_PATH "$TUNNEL_APPEX/embedded.mobileprovision"
+          fi
+
+          for fw in Payload/$APP_NAME.app/Frameworks/*; do
+            codesign --force --sign "$IDENTITY" --timestamp=none "$fw" || true
+          done
+
+          if [ -n "$TUNNEL_APPEX" ]; then
+            security cms -D -i $TUNNEL_PP_PATH > /tmp/tunnel_profile.plist 2>/dev/null
+            /usr/libexec/PlistBuddy -x -c "Print :Entitlements" /tmp/tunnel_profile.plist > /tmp/tunnel_ent.plist
+            codesign --force --sign "$IDENTITY" --entitlements /tmp/tunnel_ent.plist --timestamp=none "$TUNNEL_APPEX"
+          fi
+
+          security cms -D -i $MAIN_PP_PATH > /tmp/main_profile.plist 2>/dev/null
+          /usr/libexec/PlistBuddy -x -c "Print :Entitlements" /tmp/main_profile.plist > /tmp/main_ent.plist
+          codesign --force --sign "$IDENTITY" --entitlements /tmp/main_ent.plist --timestamp=none "Payload/$APP_NAME.app"
+
+          zip -qr flutter-vpn-engine-signed.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-vpn-engine-signed
+          path: flutter-vpn-engine-signed.ipa
