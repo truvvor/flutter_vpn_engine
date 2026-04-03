@@ -38,6 +38,13 @@ jobs:
           echo -n "$MAIN_PROVISION_PROFILE_BASE64" | base64 --decode -o $MAIN_PP_PATH
           echo -n "$TUNNEL_PROVISION_PROFILE_BASE64" | base64 --decode -o $TUNNEL_PP_PATH
 
+          echo "=== DEBUG: File sizes after base64 decode ==="
+          ls -la $CERTIFICATE_PATH $MAIN_PP_PATH $TUNNEL_PP_PATH
+          echo "=== DEBUG: Base64 string lengths ==="
+          echo "CERT length: ${#BUILD_CERTIFICATE_BASE64}"
+          echo "MAIN_PP length: ${#MAIN_PROVISION_PROFILE_BASE64}"
+          echo "TUNNEL_PP length: ${#TUNNEL_PROVISION_PROFILE_BASE64}"
+
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
@@ -55,6 +62,7 @@ jobs:
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           cp $MAIN_PP_PATH "$HOME/Library/MobileDevice/Provisioning Profiles/$MAIN_UUID.mobileprovision"
           cp $TUNNEL_PP_PATH "$HOME/Library/MobileDevice/Provisioning Profiles/$TUNNEL_UUID.mobileprovision"
+          exit 0
 
       - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign
