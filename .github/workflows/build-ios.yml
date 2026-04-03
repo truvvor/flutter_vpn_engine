@@ -18,7 +18,9 @@ jobs:
           channel: stable
 
       - name: Flutter pub get
-        run: flutter pub get
+        run: |
+          flutter pub get
+          cd example && flutter pub get
 
       - name: Install signing certificate
         env:
@@ -65,11 +67,12 @@ jobs:
           exit 0
 
       - name: Build iOS (no codesign)
+        working-directory: example
         run: flutter build ios --release --no-codesign
 
       - name: Sign and create IPA
         run: |
-          APP_PATH=$(find build/ios/iphoneos -name "*.app" -type d | head -1)
+          APP_PATH=$(find example/build/ios/iphoneos -name "*.app" -type d | head -1)
           APP_NAME=$(basename "$APP_PATH" .app)
 
           MAIN_PP_PATH=$RUNNER_TEMP/main_pp.mobileprovision
