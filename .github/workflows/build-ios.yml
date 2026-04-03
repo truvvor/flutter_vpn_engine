@@ -66,6 +66,10 @@ jobs:
           cp $TUNNEL_PP_PATH "$HOME/Library/MobileDevice/Provisioning Profiles/$TUNNEL_UUID.mobileprovision"
           exit 0
 
+      - name: Configure iOS platform
+        working-directory: example
+        run: flutter create --platforms=ios --org com.truvvor .
+
       - name: Build iOS (no codesign)
         working-directory: example
         run: flutter build ios --release --no-codesign
